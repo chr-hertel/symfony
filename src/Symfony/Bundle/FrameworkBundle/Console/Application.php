@@ -11,6 +11,7 @@
 
 namespace Symfony\Bundle\FrameworkBundle\Console;
 
+use Symfony\Component\Console\Exception\CommandNotFoundException;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Debug\Exception\FatalThrowableError;
@@ -69,7 +70,15 @@ class Application extends BaseApplication
             $this->renderRegistrationErrors($input, $output);
         }
 
-        return parent::doRun($input, $output);
+        try {
+            return parent::doRun($input, $output);
+        } catch (CommandNotFoundException $e) {
+            if ($this->registrationErrors) {
+                $this->renderRegistrationErrors($input, $output);
+            }
+
+            throw $e;
+        }
     }
 
     /**
