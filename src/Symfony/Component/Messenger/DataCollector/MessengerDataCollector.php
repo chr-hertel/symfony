@@ -15,6 +15,9 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\DataCollector\DataCollector;
 use Symfony\Component\HttpKernel\DataCollector\LateDataCollectorInterface;
+use Symfony\Component\Messenger\Stamp\ProfilerTokenStamp;
+use Symfony\Component\Messenger\Stamp\ReceivedStamp;
+use Symfony\Component\Messenger\Stamp\SentStamp;
 use Symfony\Component\Messenger\TraceableMessageBus;
 use Symfony\Component\VarDumper\Caster\ClassStub;
 
@@ -94,6 +97,11 @@ class MessengerDataCollector extends DataCollector implements LateDataCollectorI
             'caller' => $tracedMessage['caller'],
         ];
 
+        if (null !== $token = $this->getSentProfilerToken($tracedMessage)) {
+            $debugRepresentation['profiler_token'] = $token;
+            $debugRepresentation['message_class'] = $message::class;
+        }
+
         if (isset($tracedMessage['exception'])) {
             $exception = $tracedMessage['exception'];
 
@@ -104,6 +112,30 @@ class MessengerDataCollector extends DataCollector implements LateDataCollectorI
         }
 
         return $debugRepresentation;
+    }
+
+    /**
+     * Returns the token stamped on a message sent to transports, which the profiles of the workers handling it refer to.
+     */
+    private function getSentProfilerToken(array $tracedMessage): ?string
+    {
+        $token = null;
+        $sent = false;
+
+        foreach ($tracedMessage['stamps_after_dispatch'] ?? [] as $stamp) {
+            if ($stamp instanceof ReceivedStamp) {
+                // the message was received from a transport: its token is the one of the profile that sent it
+                return null;
+            }
+
+            $sent = $sent || $stamp instanceof SentStamp;
+
+            if ($stamp instanceof ProfilerTokenStamp) {
+                $token = $stamp->getToken();
+            }
+        }
+
+        return $sent ? $token : null;
     }
 
     public function getExceptionsCount(?string $bus = null): int
